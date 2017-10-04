@@ -1,5 +1,8 @@
+#! /usr/bin/env python
+
 import cv2
 import numpy as np
+import rospy
 from geometry_msgs.msg import Point
 from std_msgs.msg import String
 
@@ -11,6 +14,7 @@ class TaxiMap:
         self.resolution = res
         self.pas_state = "off"
         self.pas_loc = (0, 0)
+		self.taxi_loc = (0, 0)
 
         # draw the taxi map canvas
         self.img = np.fill((size*res, size*res, 3), 255, np.uint8)
@@ -22,13 +26,13 @@ class TaxiMap:
     def pas_serv_cb(self, state):
         self.pas_state = state.data
 
-
     def update_passenger(self):
         if self.pas_state is "on":
             self.pas_loc = self.taxi_loc
 
     def taxi_loc_sub(self, loc):
         self.taxi_loc = loc
+		self.update_passenger()
 
     def empty_map(self):
         length = (self.size - 1) / 2
@@ -46,7 +50,19 @@ class TaxiMap:
                 (self.size*self.resolution - (length*self.resolution), (self.size - 1) * self.resolution), 
                 (0, 0, 0), -1)
 
+	def update_passenger(self):
+		r = 10
+		cv2.circle(self.img, (self.pas_loc[0], self.pas_loc[1]), r, (10, 10 250), -1)
+
+	def update_taxi(self):
+		r = 10
+		cv2.retangle(self.img, (self.taxi_loc[0] - 10, self.taxi_loc[1] - 10),
+				(self.taxi_loc[0] + 10, self.taxi_loc[1] + 10), (250, 10, 10), -1)
+	
     def show_map(self):
+		self.empty_map()
+		self.update_passenger()
+		self.update_taxi()
         cv2.imshow("Taxi Map", self.img)
         cv2.waitKey(10)
 
