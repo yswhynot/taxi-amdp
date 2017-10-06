@@ -280,13 +280,15 @@ class Taxi:
         self.pas_state = state.data
 
     def update_taxi(self):
-        if self.taxi_loc[0].is_integer() and self.taxi_loc[1].is_integer():
-            self.taxi_dir = self.amdp.mdp_map.policy_map[int(self.taxi_loc[0])][int(self.taxi_loc[1])]
         step = 0.05
+        x = self.taxi_loc[0]
+        y = self.taxi_loc[1]
+        if abs(x - int(x)) < step and abs(y - int(y)) < step:
+            self.taxi_dir = self.amdp.mdp_map.policy_map[int(x)][int(y)]
         if self.taxi_dir == 0:
-            self.taxi_loc[0] += step
-        elif self.taxi_dir == 1:
             self.taxi_loc[0] -= step
+        elif self.taxi_dir == 1:
+            self.taxi_loc[0] += step
         elif self.taxi_dir == 2:
             self.taxi_loc[1] += step
         elif self.taxi_dir == 3:
@@ -339,6 +341,7 @@ class Taxi:
         while not rospy.is_shutdown():
             if self.update_state():
                 self.update_taxi()
+            self.amdp.display()
             self.taxi_loc_pub.publish(Point(self.taxi_loc[1], self.taxi_loc[0], self.taxi_dir))
             rate.sleep()
 

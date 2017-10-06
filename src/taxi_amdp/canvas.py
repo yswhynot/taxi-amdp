@@ -21,6 +21,7 @@ class TaxiMap:
 
 		self.taxi_loc_sub = rospy.Subscriber("/taxi_loc", Point, self.taxi_loc_cb)
 		self.pas_state_sub = rospy.Subscriber("/passenger", String, self.passenger_state_cb)
+        #  self.pas_loc_sub = rospy.Subscriber("/
 		rospy.loginfo("Taxi map init")
 
 	def passenger_state_cb(self, state):
