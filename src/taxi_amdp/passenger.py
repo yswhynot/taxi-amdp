@@ -16,9 +16,9 @@ class Passenger:
 
     def pas_loc_cb(self, req):
         if req.request is "current":
-            return Point(0, 0, 0)
-        elif req.request if "destination":
-            return Point(15, 15, 0)
+            return (0, 0)
+        elif req.request is "destination":
+            return (15, 15)
 
     def pas_serv_cb(self, state):
         if state is "request":
@@ -32,5 +32,5 @@ class Passenger:
 
         while not rospy.is_shutdown():
             self.pas_state_pub.publish(String(self.pas_state))
-            self.sleep()
+            rate.sleep()
 

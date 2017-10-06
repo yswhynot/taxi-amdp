@@ -13,8 +13,8 @@ class TaxiMap:
 		self.size = size
 		self.resolution = res
 		self.pas_state = "off"
-		self.pas_loc = (100, 100)
-		self.taxi_loc = (100, 100)
+		self.pas_loc = [100, 100]
+		self.taxi_loc = [100, 100]
 
 		# draw the taxi map canvas
 		self.img = np.full((size*res, size*res, 3), 255, np.uint8)
@@ -31,7 +31,7 @@ class TaxiMap:
 			self.pas_loc = self.taxi_loc
 
 	def taxi_loc_cb(self, loc):
-		self.taxi_loc = loc
+		self.taxi_loc = [loc.x, loc.y]
 		self.update_passenger()
 
 	def empty_map(self):
@@ -52,12 +52,12 @@ class TaxiMap:
 
 	def show_passenger(self):
 		r = 5
-		cv2.circle(self.img, (self.pas_loc[0], self.pas_loc[1]), r, (20, 20, 200), -1)
+		cv2.circle(self.img, (int(self.pas_loc[0]*self.resolution), (self.pas_loc[1]*self.resolution)), r, (20, 20, 200), -1)
 
 	def show_taxi(self):
 		r = 10
-		cv2.rectangle(self.img, (self.taxi_loc[0] - 10, self.taxi_loc[1] - 10),
-				(self.taxi_loc[0] + 10, self.taxi_loc[1] + 10), (200, 20, 20), -1)
+		cv2.rectangle(self.img, (int(self.taxi_loc[0]*self.resolution) - 10, int(self.taxi_loc[1]*self.resolution) - 10),
+				(int(self.taxi_loc[0]*self.resolution) + 10, int(self.taxi_loc[1]*self.resolution) + 10), (200, 20, 20), -1)
 
 	def show_map(self):
 		self.empty_map()

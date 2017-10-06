@@ -241,8 +241,8 @@ class AMDP:
         self.mdp_map = Map()
         self.nav_node.add_child(self.mdp_map)
 
-    def solve(self, action):
-        self.mdp_map.set_state(action)
+    def solve(self):
+        #  self.mdp_map.set_state(action)
         self.root.solve()
 
     def display(self):
@@ -254,18 +254,19 @@ class Taxi:
         self.taxi_loc_pub = rospy.Publisher("/taxi_loc", Point, queue_size=1)
         self.pas_state_sub = rospy.Subscriber("/passenger", String, self.psg_state_cb)
         self.pas_state = "off"
-        self.pas_loc = (0, 0)
+        self.pas_loc = [0, 0]
+        self.pas_des = [0, 0]
 
+        self.amdp = AMDP()
         self.taxi_loc = self.random_loc()
         self.taxi_dir = random.randint(0, 3)
         self.current_state = "get"
-        self.amdp = AMDP()
 
     def random_loc(self):
         x = random.randint(0, SIZE - 1)
         y = random.randint(0, SIZE - 1)
         flag = False
-        _map = self.amdp.mdp_map
+        _map = self.amdp.mdp_map._map
         while not flag:
             if _map[x][y].north and _map[x][y].south and _map[x][y].west and _map[x][y].east:
                 flag = True
@@ -273,14 +274,14 @@ class Taxi:
                 x = random.randint(0, SIZE - 1)
                 y = random.randint(0, SIZE - 1)
 
-        return (float(x), float(y))
+        return [float(x), float(y)]
 
     def psg_state_cb(self, state):
         self.pas_state = state.data
 
     def update_taxi(self):
         if self.taxi_loc[0].is_integer() and self.taxi_loc[1].is_integer():
-            self.taxi_dir = self.amdp.mdp_map.policy_map[self.taxi_loc[0]][self.taxi_loc[1]]
+            self.taxi_dir = self.amdp.mdp_map.policy_map[int(self.taxi_loc[0])][int(self.taxi_loc[1])]
         step = 0.05
         if self.taxi_dir == 0:
             self.taxi_loc[0] += step
@@ -299,28 +300,35 @@ class Taxi:
             state_srv = rospy.ServiceProxy("/pas_serv", State)
             self.pas_state = state_srv("request")
             pas_loc_srv = rospy.ServiceProxy("/pas_loc", Location)
-            if self.current_state is "get":
-                res = pas_loc_srv("current")
-                self.pas_loc = (res[0], res[1])
-            elif self.current_state is "put":
-                self.pas_loc = pas_loc_srv("destination")
+            res = pas_loc_srv("current")
+            self.pas_loc = (res[0], res[1])
+            res = pas_loc_srv("destination")
+            self.pas_des = (res[0], res[1])
         except rospy.ServiceException, e:
             pass
 
         # map environment state to abstract states
         if self.taxi_loc is self.pas_loc:
             if self.current_state is "get":
-                if self.pas_state is "off":
-                elif self.pas_state is "on":
-                    self.pas_state = "pickup"
+                self.current_state = "pickup"
             elif self.current_state is "pickup":
-                self.pas_state = "put"
+                if self.pas_state is "on":
+                    self.current_state = "put"
             elif self.current_state is "put":
                 self.amdp.mdp_map.reset_term(int(self.pas_loc[0]), int(self.pas_loc[1]))
-                self.amdp.solve("put")
+                self.amdp.solve()
                 return True
             return False
+        elif self.taxi_loc is self.pas_des:
+            if self.current_state is "put":
+                self.current_state = "putdown"
+            elif self.current_state is "putdown":
+                if self.pas_state is "off":
+                    self.current_state = "get"
+            return False
         else:
+            self.amdp.mdp_map.reset_term(int(self.pas_loc[0]), int(self.pas_loc[1]))
+            self.amdp.solve()
             return True
 
     
@@ -331,7 +339,7 @@ class Taxi:
         while not rospy.is_shutdown():
             if self.update_state():
                 self.update_taxi()
-            self.taxi_loc_pub(Point(self.taxi_loc[1], self.taxi_loc[0], self.taxi_dir))
+            self.taxi_loc_pub.publish(Point(self.taxi_loc[1], self.taxi_loc[0], self.taxi_dir))
             rate.sleep()
 
         

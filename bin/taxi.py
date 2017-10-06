@@ -1,12 +1,12 @@
 #! /usr/bin/env python
 
 import rospy
-from taxi_amdp.canvas import TaxiMap
+from taxi_amdp.taxi import Taxi
 
 if __name__ == "__main__":
     try:
-        taxi_map = TaxiMap()
-        taxi_map.start()
+        taxi = Taxi()
+        taxi.start()
     except rospy.ROSInterruptException:
         pass
 
