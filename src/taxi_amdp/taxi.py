@@ -1,6 +1,10 @@
 import rospy
+from geometry_msgs.msg import Point
+from std_msgs.msg import String
+from taxi_amdp.srv import *
 import mdptoolbox
 import numpy as _np
+import random
 import sys
 
 action = ['north', 'south', 'east', 'west', 'get', 'put', 'root']
@@ -48,6 +52,22 @@ class Map:
         # self._map(SIZE - 1, 0).is_term = True
         # self._map(0, SIZE - 1).is_term = True
         # self._map(SIZE - 1, SIZE - 1).is_term = True
+    
+    def reset_term(self, x, y):
+        for i in range(SIZE):
+            for j in range(SIZE):
+                self._map[i][j].is_term = False
+        self._map[x][y].is_term = True
+
+    def set_term(self, term):
+        if term == 0:
+            self._map[0][0].is_term = True
+        elif term == 1:
+            self._map[0][SIZE - 1].is_term = True
+        elif term == 2:
+            self._map[SIZE - 1][0].is_term = True
+        elif term == 3:
+            self._map[SIZE - 1][SIZE - 1].is_term = True
 
     def set_state(self, state):
         if state is 'get':
@@ -209,6 +229,7 @@ class MDPNode:
 
 class AMDP:
     def __init__(self):
+        # build mdp graph
         self.root = MDPNode('root', '')
         get_node = MDPNode('get', self.root)
         put_node = MDPNode('put', self.root)
@@ -227,8 +248,94 @@ class AMDP:
     def display(self):
         self.root.display()
 
+class Taxi:
+    def __init__(self):
+        rospy.init_node('taxi', anonymous=True)
+        self.taxi_loc_pub = rospy.Publisher("/taxi_loc", Point, queue_size=1)
+        self.pas_state_sub = rospy.Subscriber("/passenger", String, self.psg_state_cb)
+        self.pas_state = "off"
+        self.pas_loc = (0, 0)
+
+        self.taxi_loc = self.random_loc()
+        self.taxi_dir = random.randint(0, 3)
+        self.current_state = "get"
+        self.amdp = AMDP()
+
+    def random_loc(self):
+        x = random.randint(0, SIZE - 1)
+        y = random.randint(0, SIZE - 1)
+        flag = False
+        _map = self.amdp.mdp_map
+        while not flag:
+            if _map[x][y].north and _map[x][y].south and _map[x][y].west and _map[x][y].east:
+                flag = True
+            else:
+                x = random.randint(0, SIZE - 1)
+                y = random.randint(0, SIZE - 1)
+
+        return (float(x), float(y))
+
+    def psg_state_cb(self, state):
+        self.pas_state = state.data
+
+    def update_taxi(self):
+        if self.taxi_loc[0].is_integer() and self.taxi_loc[1].is_integer():
+            self.taxi_dir = self.amdp.mdp_map.policy_map[self.taxi_loc[0]][self.taxi_loc[1]]
+        step = 0.05
+        if self.taxi_dir == 0:
+            self.taxi_loc[0] += step
+        elif self.taxi_dir == 1:
+            self.taxi_loc[0] -= step
+        elif self.taxi_dir == 2:
+            self.taxi_loc[1] += step
+        elif self.taxi_dir == 3:
+            self.taxi_loc[1] -= step
+
+    def update_state(self):
+        # observe the passenger's state
+        rospy.wait_for_service("/pas_serv")
+        rospy.wait_for_service("/pas_loc")
+        try:
+            state_srv = rospy.ServiceProxy("/pas_serv", State)
+            self.pas_state = state_srv("request")
+            pas_loc_srv = rospy.ServiceProxy("/pas_loc", Location)
+            if self.current_state is "get":
+                res = pas_loc_srv("current")
+                self.pas_loc = (res[0], res[1])
+            elif self.current_state is "put":
+                self.pas_loc = pas_loc_srv("destination")
+        except rospy.ServiceException, e:
+            pass
+
+        # map environment state to abstract states
+        if self.taxi_loc is self.pas_loc:
+            if self.current_state is "get":
+                if self.pas_state is "off":
+                elif self.pas_state is "on":
+                    self.pas_state = "pickup"
+            elif self.current_state is "pickup":
+                self.pas_state = "put"
+            elif self.current_state is "put":
+                self.amdp.mdp_map.reset_term(int(self.pas_loc[0]), int(self.pas_loc[1]))
+                self.amdp.solve("put")
+                return True
+            return False
+        else:
+            return True
+
+    
+    def start(self):
+        rospy.loginfo("Taxi start")
+        rate = rospy.Rate(10)
         
-if __name__ == '__main__':
-    amdp = AMDP()
-    amdp.solve('get')
-    amdp.display()
+        while not rospy.is_shutdown():
+            if self.update_state():
+                self.update_taxi()
+            self.taxi_loc_pub(Point(self.taxi_loc[1], self.taxi_loc[0], self.taxi_dir))
+            rate.sleep()
+
+        
+#  if __name__ == '__main__':
+    #  amdp = AMDP()
+    #  amdp.solve('get')
+    #  amdp.display()

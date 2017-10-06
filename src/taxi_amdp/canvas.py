@@ -8,7 +8,7 @@ from std_msgs.msg import String
 
 class TaxiMap:
 	def __init__(self, size=15, res=20):
-		rospy.init_node('taxi_map', anonymous=True)
+		rospy.init_node('taxi_canvas', anonymous=True)
 
 		self.size = size
 		self.resolution = res
@@ -20,7 +20,7 @@ class TaxiMap:
 		self.img = np.full((size*res, size*res, 3), 255, np.uint8)
 
 		self.taxi_loc_sub = rospy.Subscriber("/taxi_loc", Point, self.taxi_loc_cb)
-		self.pas_loc_sub = rospy.Subscriber("/passenger", String, self.passenger_state_cb)
+		self.pas_state_sub = rospy.Subscriber("/passenger", String, self.passenger_state_cb)
 		rospy.loginfo("Taxi map init")
 
 	def passenger_state_cb(self, state):
