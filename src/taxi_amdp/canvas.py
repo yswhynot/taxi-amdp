@@ -7,7 +7,7 @@ from geometry_msgs.msg import Point
 from std_msgs.msg import String
 
 class TaxiMap:
-    def __init__(self, size=15, res=20):
+    def __init__(self, size=15, res=30):
         rospy.init_node('taxi_canvas', anonymous=True)
 
         self.size = size
@@ -28,6 +28,8 @@ class TaxiMap:
     def pas_loc_cb(self, p):
         if self.pas_state == "off":
             self.pas_loc = [p.x, p.y]
+        elif self.pas_state == "left":
+            self.pas_loc = [-1, -1]
 
     def passenger_state_cb(self, state):
         self.pas_state = state.data
@@ -44,24 +46,24 @@ class TaxiMap:
         length = (self.size - 1) / 2
         self.img = np.full((self.size*self.resolution, self.size*self.resolution, 3), 255, np.uint8)
         cv2.rectangle(self.img, 
-                (length * self.resolution, 0), 
-                (int((length+0.5) * self.resolution), int((length-0.5) * self.resolution)), 
+                (int((length+0.25) * self.resolution), 0), 
+                (int((length+0.75) * self.resolution), int((length-0.5) * self.resolution)), 
                 (0, 0, 0), -1)
         cv2.rectangle(self.img, 
-                (1 * self.resolution, self.size*self.resolution - 1), 
-                (int(1.5 * self.resolution), self.size*self.resolution - (length*self.resolution)), 
+                (int(1.25 * self.resolution), self.size*self.resolution - 1), 
+                (int(1.75 * self.resolution), self.size*self.resolution - int((length-0.5)*self.resolution)), 
                 (0, 0, 0), -1)
         cv2.rectangle(self.img, 
-                (int((self.size - 3) * self.resolution), self.size*self.resolution - 1), 
-                (int((self.size - 2.5) * self.resolution), self.size*self.resolution - (length*self.resolution)), 
+                (int((self.size - 2.75) * self.resolution), self.size*self.resolution - 1), 
+                (int((self.size - 2.25) * self.resolution), self.size*self.resolution - int((length-0.5)*self.resolution)), 
                 (0, 0, 0), -1)
 
     def show_passenger(self):
-        r = 5
+        r = int(0.5*self.resolution/2)
         cv2.circle(self.img, (int(self.pas_loc[0]*self.resolution), int(self.pas_loc[1]*self.resolution)), r, (20, 20, 200), -1)
 
     def show_taxi(self):
-        r = 6
+        r = int(0.6*self.resolution/2)
         cv2.rectangle(self.img, (int(self.taxi_loc[0]*self.resolution) - r, int(self.taxi_loc[1]*self.resolution) - r),
                 (int(self.taxi_loc[0]*self.resolution) + r, int(self.taxi_loc[1]*self.resolution) + r), (200, 20, 20), -1)
 

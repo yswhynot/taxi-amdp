@@ -9,6 +9,7 @@ from taxi_amdp.planner import AMDP
 import random
 
 SIZE = 15
+ACTION = 4
 
 class Taxi:
     def __init__(self):
@@ -41,13 +42,32 @@ class Taxi:
     def psg_state_cb(self, state):
         self.pas_state = state.data
 
+    def wrap_direction(self, d):
+        if d < 0:
+            d += ACTION
+        elif d >= ACTION:
+            d -= ACTION
+        return d
+
+    def noisy_direction(self, d, x, y):
+        w = 0.2/3
+        rand = random.uniform(0, 1)
+        r = d
+        if rand < w:
+            r = self.wrap_direction(d+1)
+        elif rand < 2*w:
+            r = self.wrap_direction(d+2)
+        elif rand < 3*w:
+            r = self.wrap_direction(d+3)
+        return self.amdp.mdp_map.valid_action(x, y, r)
+
     def update_taxi(self):
-        step = 0.05
+        step = 0.1
         x = self.taxi_loc[0]
         y = self.taxi_loc[1]
         #  print "x: %f, %d, y: %f, %d" % (x, int(x+step), y, int(y+step))
-        if abs(x - int(x+step)) < (step/2) and abs(y - int(y+step)) < (step/2):
-            self.taxi_dir = self.amdp.mdp_map.policy_map[int(x+step)][int(y+step)]
+        if abs(x - int(x+0.05)) < (step/2) and abs(y - int(y+0.05)) < (step/2):
+            self.taxi_dir = self.noisy_direction(self.amdp.mdp_map.policy_map[int(x+0.05)][int(y+0.05)], int(x+0.05), int(y+0.05))
         if self.taxi_dir == 0:
             self.taxi_loc[0] -= step
         elif self.taxi_dir == 1:
@@ -109,5 +129,6 @@ class Taxi:
                 self.update_taxi()
             #  if self.current_state == "put":
                 #  self.amdp.display()
+            #  self.amdp.display()
             self.taxi_loc_pub.publish(Point(self.taxi_loc[1], self.taxi_loc[0], self.taxi_dir))
             rate.sleep()

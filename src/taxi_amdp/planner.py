@@ -49,6 +49,28 @@ class Map:
         # self._map(0, SIZE - 1).is_term = True
         # self._map(SIZE - 1, SIZE - 1).is_term = True
     
+    def valid_action(self, x, y, a):
+        pa = self._map[x][y]
+        backup = 0
+        action_arr = [0, 0, 0, 0]
+        if pa.north:
+            backup = 0
+            action_arr[0] = 1
+        if pa.south:
+            backup = 1
+            action_arr[1] = 1
+        if pa.east:
+            backup = 2
+            action_arr[2] = 1
+        if pa.west:
+            backup = 3
+            action_arr[3] = 1
+        
+        if action_arr[a] == 1:
+            return a
+        else:
+            return backup
+
     def reset_term(self, x, y):
         for i in range(SIZE):
             for j in range(SIZE):
