@@ -70,24 +70,13 @@ class Map:
             return a
         else:
             return backup
-
-    def reset_term(self, x, y):
-        for i in range(SIZE):
-            for j in range(SIZE):
-                self._map[i][j].is_term = False
-        #  print "x: %d, y: %d" % (x, y)
-        self._map[x][y].is_term = True
-
+    
     def set_term(self, term):
-        if term == 0:
-            self._map[0][0].is_term = True
-        elif term == 1:
-            self._map[0][SIZE - 1].is_term = True
-        elif term == 2:
-            self._map[SIZE - 1][0].is_term = True
-        elif term == 3:
-            self._map[SIZE - 1][SIZE - 1].is_term = True
-
+        for x in range(SIZE):
+            for y in range(SIZE):
+                self._map[x][y].is_term = False
+        self._map[term[0]][term[1]].is_term = True
+    
     def get_neighbor_index(self, i):
         x = int(i / SIZE)
         y = i - x*SIZE
@@ -185,6 +174,13 @@ class Map:
                 sys.stdout.write(' ')
             sys.stdout.write('\n')
         # self.print_map(2)
+    
+    def display_value(self):
+        for x in range(SIZE):
+            for y in range(SIZE):
+                sys.stdout.write('%.2f ' % self.value_map[x][y])
+            sys.stdout.write('\n');
+        sys.stdout.write('\n')
 
     def print_map(self, action):
         pmap = self._map
@@ -215,53 +211,120 @@ class Map:
             sys.stdout.write('\n')
 
 class MDPNode:
-    def __init__(self, name, parent):
-        self.name = name
-        self.childs = []
+    def __init__(self, encode):
+        self.encode = encode
+        self.locatiton = (0, 0)
+        self.edge_list = []
+        self.id = -1
 
-        if parent is '':
-            return
-        parent.add_child(self)
-        self.parents = [parent]
+class MDPEdge:
+    def __init__(self, pid, cid, start, mid, term):
+        self.parent_id = pid
+        self.child_id = cid
+        self.map = Map()
+        self.start = start
+        self.mid = mid
+        self.term = term
+        self.reward = 0
 
-    def add_child(self, child):
-        self.childs.append(child)
+    def get_reward(self):
+        if self.reward == -1:
+            return -1
+        self.map.set_term(self.mid)
+        self.map.solve()
+        value_map = self.map.value_map
+        r1 = value_map[self.start[0]][self.start[1]]
 
-    def add_parent(self, parent):
-        self.parents.append(parent)
-
-    def solve(self):
-        for child in self.childs:
-            child.solve()
-
-    def display(self):
-        sys.stdout.write("\n")
-        sys.stdout.write(self.name)
-        for child in self.childs:
-            child.display()
-
+        self.map.set_term(self.term)
+        self.map.solve()
+        value_map = self.map.value_map
+        r2 = value_map[self.mid[0]][self.mid[1]]
+        self.reward = r1 + r2 
+        return self.reward
+ 
 class AMDP:
     def __init__(self):
-        # build mdp graph
-        self.root = MDPNode('root', '')
-        get_node = MDPNode('get', self.root)
-        put_node = MDPNode('put', self.root)
-        pick_node = MDPNode('pick', get_node)
-        drop_node = MDPNode('drop', put_node)
-        self.nav_node = MDPNode('nav', put_node)
-        self.nav_node.add_parent(get_node)
+        self.map = Map()
+        self.code_list = []
+        self.node_list = []
+        self.pas_count = 3
+        self.root = None
+        self.pas_start = [(0, 0), (0, 14), (14, 0)]
+        self.pas_end = [(14, 14), (14, 0), (0, 0)]
+
+    def create_child(self, parent):
+        if parent.encode.uint == (2**self.pas_count - 1):
+            return
+        for i in range(self.pas_count):
+            if parent.encode.bin[i] == '1':
+                child = MDPNode(parent.encode)
+                child.id = parent.id 
+                child.location = parent.location
+                edge = MDPEdge(parent.id, child.id, parent.location, parent.location, child.location)
+                edge.reward = -1
+                parent.edge_list += [edge]
+                continue
+                
+            child_code = BitArray(parent.encode)
+            child_code[i] = 1
+            child= MDPNode(child_code)
+            child.id = len(self.node_list)
+            child.location = self.pas_end[i]
+            edge = MDPEdge(parent.id, child.id, parent.location, self.pas_start[i], child.location)
+            parent.edge_list += [edge]
+            self.node_list += [child]
+            self.create_child(child)
+
+    def build_graph(self, taxi_start):
+        #  taxi_start = (5, 5)
+        pas_count = self.pas_count
+        for i in range(2**pas_count):
+            encode = BitArray(uint=i, length=pas_count)
+            self.code_list += [encode]
         
-        self.mdp_map = Map()
-        self.nav_node.add_child(self.mdp_map)
+        # build the graph
+        self.root = MDPNode(self.code_list[0])
+        self.root.location = taxi_start
+        self.root.id = 0
+        self.node_list += [self.root]
+        # create children dfs
+        self.create_child(self.root)
+
+    def generate_mdp(self):
+        total_state = len(self.node_list)
+        T = _np.zeros((self.pas_count, total_state, total_state))
+        for i in range(total_state):
+            for a in range(self.pas_count):
+                if len(self.node_list[i].edge_list) == 0:
+                    T[a, i, i] = 1
+                    continue
+                cid = self.node_list[i].edge_list[a].child_id
+                T[a, i, cid] = 1
+        self.T = T
+        
+        # build reward matrix
+        R = _np.zeros((total_state, self.pas_count))
+        for i in range(total_state):
+            for a in range(self.pas_count):
+                if len(self.node_list[i].edge_list) == 0:
+                    continue
+                edge = self.node_list[i].edge_list[a] 
+                if edge.reward == -1:
+                    continue
+                R[i, a] = edge.get_reward()
+        self.R = R
 
     def solve(self):
-        self.root.solve()
+        vi = mdptoolbox.mdp.ValueIteration(self.T, self.R, 0.95)
+        vi.run()
+
+        policy = vi.policy
+        self.policy = policy
 
     def display(self):
-        self.root.display()
+        print self.policy
 
 
-        
 #  if __name__ == '__main__':
     #  amdp = AMDP()
     #  amdp.solve('get')

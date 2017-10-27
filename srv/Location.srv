@@ -1,3 +1,3 @@
 string request
 ---
-float32[2] pt
+Point[3] pt
