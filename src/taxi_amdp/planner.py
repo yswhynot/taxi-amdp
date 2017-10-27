@@ -2,6 +2,7 @@ import mdptoolbox
 import numpy as _np
 import random
 import sys
+from bitstring import BitArray
 
 action = ['north', 'south', 'east', 'west', 'get', 'put', 'root']
 
@@ -155,6 +156,8 @@ class Map:
         # parse policy
         policy = vi.policy
         self.policy_map = [[policy[x*SIZE + y] for y in range(SIZE)] for x in range(SIZE)]
+        value = vi.V
+        self.value_map = [[value[x*SIZE + y] for y in range(SIZE)] for x in range(SIZE)]
 
     def display(self):
         policy_map = self.policy_map
@@ -226,6 +229,8 @@ class MDPEdge:
         self.mid = mid
         self.term = term
         self.reward = 0
+        self.policy_get = []
+        self.policy_put = []
 
     def get_reward(self):
         if self.reward == -1:
@@ -233,11 +238,13 @@ class MDPEdge:
         self.map.set_term(self.mid)
         self.map.solve()
         value_map = self.map.value_map
+        self.policy_get = self.map.policy_map
         r1 = value_map[self.start[0]][self.start[1]]
 
         self.map.set_term(self.term)
         self.map.solve()
         value_map = self.map.value_map
+        self.policy_put = self.map.policy_map
         r2 = value_map[self.mid[0]][self.mid[1]]
         self.reward = r1 + r2 
         return self.reward
@@ -251,6 +258,8 @@ class AMDP:
         self.root = None
         self.pas_start = [(0, 0), (0, 14), (14, 0)]
         self.pas_end = [(14, 14), (14, 0), (0, 0)]
+        self.current_id = 0
+        self.is_get = True
 
     def create_child(self, parent):
         if parent.encode.uint == (2**self.pas_count - 1):
@@ -315,11 +324,38 @@ class AMDP:
         self.R = R
 
     def solve(self):
+        self.generate_mdp()
         vi = mdptoolbox.mdp.ValueIteration(self.T, self.R, 0.95)
         vi.run()
 
         policy = vi.policy
         self.policy = policy
+
+    def get_next_policy(self):
+        i = self.current_id
+        e = self.node_list[i].edge_list[self.policy[i]]
+        policy = []
+        if self.is_get:
+            policy = e.policy_get
+            self.is_get = False
+        else:
+            policy = e.policy_put
+            self.is_get = True
+            self.current_id = e.child_id 
+        return policy
+    
+    def get_current_pas(self):
+        pid = self.current_id
+        #  print pid
+        #  print self.node_list[pid].edge_list
+        e = self.node_list[pid].edge_list[self.policy[pid]]
+        cid = e.child_id 
+        p_code = self.node_list[pid].encode
+        c_code = self.node_list[cid].encode
+        for i in range(self.pas_count):
+            if p_code[i] != c_code[i]:
+                return i
+        return -1
 
     def display(self):
         print self.policy

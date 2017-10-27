@@ -53,7 +53,7 @@ catkin_python_setup()
 ## Generate messages in the 'msg' folder
 add_message_files(
   FILES
-  Point.msg
+  Point2D.msg
   PointList.msg
   StringList.msg
 )

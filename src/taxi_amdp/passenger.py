@@ -3,7 +3,7 @@
 import rospy
 from std_msgs.msg import String
 #  from geometry_msgs.msg import Point 
-from taxi_amdp.msg import Point
+from taxi_amdp.msg import Point2D
 from taxi_amdp.msg import StringList
 from taxi_amdp.msg import PointList
 from taxi_amdp.srv import *
@@ -17,8 +17,8 @@ class Passenger:
         self.loc_srv = rospy.Service("/pas_loc", Location, self.pas_loc_cb)
         self.pas_state = ["off", "off", "off"]
 
-        self.current = PointList([Point(1, 1), Point(1, 14), Point(14, 1)])
-        self.destination = PointList([Point(14, 14), Point(14, 1), Point(1, 1)])
+        self.current = PointList([Point2D(1, 1), Point2D(1, 14), Point2D(14, 1)])
+        self.destination = PointList([Point2D(14, 14), Point2D(14, 1), Point2D(1, 1)])
 
         rospy.loginfo("Passenger init")
 

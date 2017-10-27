@@ -1,5 +1,7 @@
 import rospy
-from geometry_msgs.msg import Point
+from geometry_msgs.msg import Point 
+from taxi_amdp.msg import PointList
+from taxi_amdp.msg import StringList
 from std_msgs.msg import String
 from taxi_amdp.srv import *
 from taxi_amdp.planner import PositionAction
@@ -15,21 +17,27 @@ class Taxi:
     def __init__(self):
         rospy.init_node('taxi', anonymous=True)
         self.taxi_loc_pub = rospy.Publisher("/taxi_loc", Point, queue_size=1)
-        self.pas_state_sub = rospy.Subscriber("/passenger", String, self.psg_state_cb)
-        self.pas_state = "off"
-        self.pas_loc = [0, 0]
-        self.pas_des = [0, 0]
+        self.pas_state_sub = rospy.Subscriber("/passenger", StringList, self.psg_state_cb)
+        self.pas_count = 3
+        self.pas_state = ["off", "off", "off"]
+        self.pas_loc = [(1, 1), (1, 14), (14, 1)]  
+        self.pas_des = [(14, 14), (14, 1), (1, 1)] 
 
         self.amdp = AMDP()
+        self._map = Map()
         self.taxi_loc = self.random_loc()
         self.taxi_dir = random.randint(0, 3)
         self.current_state = "get"
+        self.amdp.build_graph([int(self.taxi_loc[0]), int(self.taxi_loc[1])])
+        self.amdp.solve()
+        self.policy_map = self.amdp.get_next_policy()
+        self.need_new_policy = True
 
     def random_loc(self):
         x = random.randint(0, SIZE - 1)
         y = random.randint(0, SIZE - 1)
         flag = False
-        _map = self.amdp.mdp_map._map
+        _map = self._map._map 
         while not flag:
             if _map[x][y].north and _map[x][y].south and _map[x][y].west and _map[x][y].east:
                 flag = True
@@ -40,7 +48,8 @@ class Taxi:
         return [float(x), float(y)]
 
     def psg_state_cb(self, state):
-        self.pas_state = state.data
+        for i in range(self.pas_count):
+            self.pas_state[i] = state.list[i]
 
     def wrap_direction(self, d):
         if d < 0:
@@ -50,7 +59,7 @@ class Taxi:
         return d
 
     def noisy_direction(self, d, x, y):
-        w = 0.2/3
+        w = 0.02/3
         rand = random.uniform(0, 1)
         r = d
         if rand < w:
@@ -59,7 +68,7 @@ class Taxi:
             r = self.wrap_direction(d+2)
         elif rand < 3*w:
             r = self.wrap_direction(d+3)
-        return self.amdp.mdp_map.valid_action(x, y, r)
+        return self._map.valid_action(x, y, r)
 
     def update_taxi(self):
         step = 0.1
@@ -67,7 +76,7 @@ class Taxi:
         y = self.taxi_loc[1]
         #  print "x: %f, %d, y: %f, %d" % (x, int(x+step), y, int(y+step))
         if abs(x - int(x+0.05)) < (step/2) and abs(y - int(y+0.05)) < (step/2):
-            self.taxi_dir = self.noisy_direction(self.amdp.mdp_map.policy_map[int(x+0.05)][int(y+0.05)], int(x+0.05), int(y+0.05))
+            self.taxi_dir = self.noisy_direction(self.policy_map[int(x+0.05)][int(y+0.05)], int(x+0.05), int(y+0.05))
         if self.taxi_dir == 0:
             self.taxi_loc[0] -= step
         elif self.taxi_dir == 1:
@@ -79,44 +88,51 @@ class Taxi:
 
     def update_state(self):
         # observe the passenger's state
-        rospy.wait_for_service("/pas_serv")
-        rospy.wait_for_service("/pas_loc")
-        try:
-            state_srv = rospy.ServiceProxy("/pas_serv", State)
-            self.pas_state = state_srv("request").state
-            pas_loc_srv = rospy.ServiceProxy("/pas_loc", Location)
-            res = pas_loc_srv("current")
-            self.pas_loc = (res.pt[0], res.pt[1])
-        except rospy.ServiceException, e:
-            pass
+        #  rospy.wait_for_service("/pas_serv")
+        #  rospy.wait_for_service("/pas_loc")
+        #  try:
+            #  state_srv = rospy.ServiceProxy("/pas_serv", State)
+            #  self.pas_state = state_srv("request").state
+            #  pas_loc_srv = rospy.ServiceProxy("/pas_loc", Location)
+            #  res = pas_loc_srv("current")
+            #  self.pas_loc = (res.pt[0], res.pt[1])
+        #  except rospy.ServiceException, e:
+            #  pass
 
         # map environment state to abstract states
-        print "taxi: (%.2f, %.2f), pas: (%.2f, %.2f), des: (%.2f, %.2f)" % (self.taxi_loc[0], self.taxi_loc[1], self.pas_loc[0], self.pas_loc[1], self.pas_des[0], self.pas_des[1])
-        print "taxi: %s, pas: %s" % (self.current_state, self.pas_state)
-        if abs(self.taxi_loc[0] - self.pas_loc[0]) < 0.01 and abs(self.taxi_loc[1] - self.pas_loc[1]) < 0.01:
+        #  print "taxi: (%.2f, %.2f), pas: (%.2f, %.2f), des: (%.2f, %.2f)" % (self.taxi_loc[0], self.taxi_loc[1], self.pas_loc[0], self.pas_loc[1], self.pas_des[0], self.pas_des[1])
+        print "taxi: %s, pas: %s, %s, %s" % (self.current_state, self.pas_state[0], self.pas_state[1], self.pas_state[2])
+        cid = self.amdp.get_current_pas()
+        if(cid == -1):
+            print "error get pas id"
+            return False
+
+        if abs(self.taxi_loc[0] - self.pas_loc[cid][0]) < 0.01 and \
+                abs(self.taxi_loc[1] - self.pas_loc[cid][1]) < 0.01:
             if self.current_state == "get":
                 self.current_state = "pickup"
             elif self.current_state == "pickup":
-                if self.pas_state == "on":
+                if self.pas_state[cid] == "on":
                     self.current_state = "put"
+                    self.need_new_policy = True
             elif self.current_state == "put":
-                res = pas_loc_srv("destination")
-                self.pas_des = (res.pt[0], res.pt[1])
-                self.amdp.mdp_map.reset_term(int(self.pas_des[0]+0.05), int(self.pas_des[1]+0.05))
-                self.amdp.solve()
+                if self.need_new_policy:
+                    self.policy_map = self.amdp.get_next_policy()
+                    self.need_new_policy = False
                 return True
             return False
-        elif abs(self.taxi_loc[0] - self.pas_des[0]) < 0.01 and abs(self.taxi_loc[1] - self.pas_des[1]) < 0.01:
+        elif abs(self.taxi_loc[0] - self.pas_des[cid][0]) < 0.01 and abs(self.taxi_loc[1] - self.pas_des[cid][1]) < 0.01:
             if self.current_state == "put":
                 self.current_state = "putdown"
             elif self.current_state == "putdown":
-                if self.pas_state == "off":
+                if self.pas_state[cid] == "off":
                     self.current_state = "get"
             return False
         else:
             if self.current_state == "get":
-                self.amdp.mdp_map.reset_term(int(self.pas_loc[0]), int(self.pas_loc[1]))
-                self.amdp.solve()
+                if self.need_new_policy:
+                    self.policy_map = self.amdp.get_next_policy()
+                    self.need_new_policy = False
             return True
 
     

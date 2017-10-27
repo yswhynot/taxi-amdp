@@ -3,7 +3,10 @@
 import cv2
 import numpy as np
 import rospy
-from geometry_msgs.msg import Point
+from taxi_amdp.msg import StringList
+from taxi_amdp.msg import PointList
+from taxi_amdp.msg import Point2D
+from geometry_msgs.msg import Point 
 from std_msgs.msg import String
 
 class TaxiMap:
@@ -12,31 +15,35 @@ class TaxiMap:
 
         self.size = size
         self.resolution = res
-        self.pas_state = "off"
-        self.pas_loc = [100, 100]
+        self.pas_count = 3
+        self.pas_state = ["off", "off", "off"]
+        self.pas_loc = [(100, 100), (100, 100), (100, 100)]
         self.taxi_loc = [100, 100]
 
         # draw the taxi map canvas
         self.img = np.full((size*res, size*res, 3), 255, np.uint8)
 
         self.taxi_loc_sub = rospy.Subscriber("/taxi_loc", Point, self.taxi_loc_cb)
-        self.pas_loc_sub = rospy.Subscriber("/pas_loc", Point, self.pas_loc_cb)
-        self.pas_state_sub = rospy.Subscriber("/passenger", String, self.passenger_state_cb)
+        self.pas_loc_sub = rospy.Subscriber("/pas_loc", PointList, self.pas_loc_cb)
+        self.pas_state_sub = rospy.Subscriber("/passenger", StringList, self.passenger_state_cb)
         #  self.pas_loc_sub = rospy.Subscriber("/
         rospy.loginfo("Taxi map init")
 
     def pas_loc_cb(self, p):
-        if self.pas_state == "off":
-            self.pas_loc = [p.x, p.y]
-        elif self.pas_state == "left":
-            self.pas_loc = [-1, -1]
+        for i in range(self.pas_count):
+            if self.pas_state[i] == "off":
+                self.pas_loc[i] = [p.points[i].x, p.points[i].y]
+            elif self.pas_state[i] == "left":
+                self.pas_loc[i] = [-1, -1]
 
     def passenger_state_cb(self, state):
-        self.pas_state = state.data
+        for i in range(self.pas_count):
+            self.pas_state[i] = state.list[i]
 
     def update_passenger(self):
-        if self.pas_state == "on":
-            self.pas_loc = self.taxi_loc
+        for i in range(self.pas_count):
+            if self.pas_state[i] == "on":
+                self.pas_loc[i] = self.taxi_loc
 
     def taxi_loc_cb(self, loc):
         self.taxi_loc = [loc.x, loc.y]
@@ -60,7 +67,8 @@ class TaxiMap:
 
     def show_passenger(self):
         r = int(0.5*self.resolution/2)
-        cv2.circle(self.img, (int(self.pas_loc[0]*self.resolution), int(self.pas_loc[1]*self.resolution)), r, (20, 20, 200), -1)
+        for i in range(self.pas_count):
+            cv2.circle(self.img, (int(self.pas_loc[i][0]*self.resolution), int(self.pas_loc[i][1]*self.resolution)), r, (20, 20, 200), -1)
 
     def show_taxi(self):
         r = int(0.6*self.resolution/2)
